@@ -1,0 +1,32 @@
+{
+    "key": [
+        {
+            "": [
+                {
+                    "policy": "read"
+                }
+            ]
+        },
+        {
+            "foo/": [
+                {
+                    "policy": "write"
+                }
+            ]
+        },
+        {
+            "foo/bar/": [
+                {
+                    "policy": "read"
+                }
+            ]
+        },
+        {
+            "foo/bar/baz": [
+                {
+                    "policy": "deny"
+                }
+            ]
+        }
+    ]
+}

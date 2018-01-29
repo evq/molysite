@@ -1,0 +1,8 @@
+{
+    "bar": "new\nline",
+    "foo": "bar\"baz\\n",
+    "nested": "${HH\\\\:mm\\\\:ss}",
+    "nestedquotes": "${\"\\\"stringwrappedinquotes\\\"\"}",
+    "qax": "slash\\:colon",
+    "qux": "back\\slash"
+}

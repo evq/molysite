@@ -1,0 +1,11 @@
+{
+    "foo": [
+        {
+            "somekey1": "someval1"
+        },
+        {
+            "someextrakey": "someextraval",
+            "somekey2": "someval2"
+        }
+    ]
+}

@@ -1,0 +1,5 @@
+{
+    "bar": "${file(\"bing/bong.txt\")}",
+    "foo": "bar",
+    "foo-bar": "baz"
+}

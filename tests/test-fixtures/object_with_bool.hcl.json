@@ -1,0 +1,14 @@
+{
+    "path": [
+        {
+            "permissions": [
+                {
+                    "bool": [
+                        false
+                    ]
+                }
+            ],
+            "policy": "write"
+        }
+    ]
+}

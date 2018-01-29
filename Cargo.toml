@@ -1,0 +1,8 @@
+[package]
+authors = ["eV <ev@7pr.xyz>"]
+name = "molysite"
+version = "0.1.0"
+
+[dependencies.nom]
+features = ["nightly"]
+version = "^3.2"
