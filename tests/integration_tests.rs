@@ -70,7 +70,7 @@ fn test_fixture(case: &str, expect_pass: bool) {
     let mut file = File::open(&path).unwrap();
     file.read_to_string(&mut hcl).unwrap();
 
-    if (expect_pass) {
+    if expect_pass {
         let path = Path::new(&json_path);
         let mut file = File::open(&path).unwrap();
         file.read_to_string(&mut json).unwrap();
@@ -78,14 +78,14 @@ fn test_fixture(case: &str, expect_pass: bool) {
 
     let parsed_hcl = parse_hcl(&hcl);
     if let Ok(parsed_hcl) = parsed_hcl {
-        if (expect_pass) {
+        if expect_pass {
             let parsed_json = parse_json(&json).unwrap();
             assert_eq!(parsed_hcl, parsed_json);
         } else {
             panic!("Expected failure")
         }
     } else {
-        if (expect_pass) {
+        if expect_pass {
             panic!("Expected success")
         }
     }

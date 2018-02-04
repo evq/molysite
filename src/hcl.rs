@@ -1,56 +1,56 @@
-use std::str::{self, FromStr};
-use std::string::String;
 use std::collections::HashMap;
+use std::str;
+use std::string::String;
 
-use nom::{alphanumeric, eol, multispace, not_line_ending};
-use nom::IResult::Done;
+use nom;
+use nom::types::CompleteStr;
+use nom::{Needed, ExtendInto, alphanumeric, eol, multispace, not_line_ending};
 
 use common::{boolean, number};
 use types::{JsonValue, ParseError};
 
 
 pub fn parse_hcl(config: &str) -> Result<JsonValue, ParseError> {
-    match hcl(&config.as_bytes()[..]) {
-        Done(_, c) => Ok(c),
+    match hcl(CompleteStr(config)) {
+        Ok((_, c)) => Ok(c),
         _          => Err(0)
     }
 }
 
-named!(hcl<JsonValue>, map!(hcl_top, |h| JsonValue::Object(h)));
+complete_named!(hcl<JsonValue>, map!(hcl_top, |h| JsonValue::Object(h)));
 
-named!(end_of_line, alt!(eof!() | eol));
+complete_named!(end_of_line, alt!(eof!() | eol));
 
-fn to_s(i:Vec<u8>) -> String { String::from_utf8_lossy(&i).into_owned() }
 fn slen(i: String) -> usize { i.len() } 
-fn ulen(i: &[u8]) -> usize { i.len() }
+fn cslen(i: CompleteStr) -> usize { i.0.len() }
 fn take_limited(min: usize, max: usize) -> usize { if max < min { return max } return min }
 
-named!(hcl_escaped_string<String>, map!(
+complete_named!(hcl_escaped_string<String>, 
     escaped_transform!(is_not!("\\\"\n"), '\\', alt!(
-        tag!("\\")       => { |_| &b"\\"[..] } |
-        tag!("\"")       => { |_| &b"\""[..] } |
-        tag!("n")        => { |_| &b"\n"[..] }
-    )), to_s
-));
+        tag!("\\")       => { |_| "\\" } |
+        tag!("\"")       => { |_| "\"" } |
+        tag!("n")        => { |_| "\n" }
+    ))
+);
 
-named!(hcl_template_string<String>, map!(
+complete_named!(hcl_template_string<String>, map!(
     do_parse!(
         tag!("${") >>
         s: take_until_and_consume!("}") >>
         (s)
     ),
-    |s| { format!("${{{}}}", String::from_utf8_lossy(s)) }
+    |s: CompleteStr| { format!("${{{}}}", s.0) }
 ));
 
-named!(hcl_quoted_escaped_string<String>, delimited!(
+complete_named!(hcl_quoted_escaped_string<String>, delimited!(
     tag!("\""), 
     map!(
         fold_many0!(
-            alt_complete!(
+            alt!(
                 hcl_template_string |
                 flat_map!(do_parse!(
                     max: map!(peek!(hcl_escaped_string), slen) >>
-                    min: map!(peek!(take_until!("${")), ulen) >>
+                    min: map!(peek!(take_until!("${")), cslen) >>
                     buf: take!(take_limited(min, max)) >>
                     (buf)
                 ), hcl_escaped_string) |
@@ -67,20 +67,18 @@ named!(hcl_quoted_escaped_string<String>, delimited!(
     tag!("\"")
 ));
 
-named!(hcl_multiline_string<String>, map!(
+complete_named!(hcl_multiline_string<String>, map!(
     do_parse!(
-        delimiter: tag!("<<") >>
+        tag!("<<") >>
         indent: opt!(tag!("-")) >>
         delimiter: terminated!(alphanumeric, eol) >>
-        delimiter_str: expr_res!(str::from_utf8(delimiter)) >>
-        s: take_until!(delimiter_str) >>
-        tag!(delimiter_str) >>
+        s: take_until!(delimiter.0) >>
+        tag!(delimiter.0) >>
         end_of_line >>
         (indent, s)
     ),
     |(indent, s)| {
-        let body = String::from_utf8_lossy(s);
-        let lines: Vec<&str> = body.split("\n").collect();
+        let lines: Vec<&str> = s.0.split("\n").collect();
         let mut out: Vec<&str> = Vec::new();
         let count = lines.len();
 
@@ -113,31 +111,31 @@ named!(hcl_multiline_string<String>, map!(
 ));
 
 // close enough...
-named!(identifier_char, alt!(tag!("_") | tag!("-") | tag!(".") | alphanumeric));
+complete_named!(identifier_char, alt!(tag!("_") | tag!("-") | tag!(".") | alphanumeric));
 
-named!(hcl_unquoted_key<String>, map!(
+complete_named!(hcl_unquoted_key<String>, 
     fold_many0!(
         identifier_char,
-        Vec::new(),
-        |mut acc: Vec<_>, item| {
-            acc.extend(item);
+        String::new(),
+        |mut acc: String, item: CompleteStr| {
+            //acc.extend(item);
+            item.extend_into(&mut acc);
             acc
         }
-    ),
-    to_s
-));
+    )
+);
 
-named!(hcl_quoted_escaped_key<String>, 
+complete_named!(hcl_quoted_escaped_key<String>, 
    map!(do_parse!(tag!("\"") >> out: opt!(hcl_escaped_string) >> tag!("\"") >> (out)),
    |out| { if let Some(val) = out { val } else { "".to_string() } }
 ));
 
-named!(hcl_key<String>, alt!(
+complete_named!(hcl_key<String>, alt!(
    hcl_quoted_escaped_key |
    hcl_unquoted_key
 ));
 
-named!(space, eat_separator!(&b" \t"[..]));
+complete_named!(space, eat_separator!(&b" \t"[..]));
 
 macro_rules! sp (
     ($i:expr, $($args:tt)*) => (
@@ -147,31 +145,31 @@ macro_rules! sp (
     )
 );
 
-named!(hcl_key_value<(String, JsonValue)>, sp!(alt_complete!(
+complete_named!(hcl_key_value<(String, JsonValue)>, sp!(alt!(
     separated_pair!(hcl_key, tag!("="), hcl_value_nested_hash) |
     separated_pair!(hcl_key, tag!("="), hcl_value) |
     pair!(hcl_key, hcl_value_nested_hash)
 )));
 
-named!(comment_one_line,
-    do_parse!(alt!(tag!("//") | tag!("#")) >> opt!(not_line_ending) >> end_of_line >> (&b""[..]))
+complete_named!(comment_one_line,
+    do_parse!(alt!(tag!("//") | tag!("#")) >> opt!(not_line_ending) >> end_of_line >> (CompleteStr("")))
 );
 
-named!(comment_block,
-    do_parse!(tag!("/*") >> take_until_and_consume!("*/") >> (&b""[..]))
+complete_named!(comment_block,
+    do_parse!(tag!("/*") >> take_until_and_consume!("*/") >> (CompleteStr("")))
 );
 
-named!(blanks,
-    do_parse!(many0!(alt!(tag!(",") | multispace | comment_one_line | comment_block)) >> (&b""[..]))
+complete_named!(blanks,
+    do_parse!(many0!(alt!(tag!(",") | multispace | comment_one_line | comment_block)) >> (CompleteStr("")))
 );
 
-named!(hcl_key_values<Vec<(String, JsonValue)>>,
-    many0!(complete!(do_parse!(
+complete_named!(hcl_key_values<Vec<(String, JsonValue)>>,
+    many0!(do_parse!(
         opt!(blanks) >> out: hcl_key_value >> opt!(blanks) >> (out)
-    )))
+    ))
 );
 
-named!(hcl_hash<HashMap<String, JsonValue>>, 
+complete_named!(hcl_hash<HashMap<String, JsonValue>>, 
    do_parse!(
        opt!(blanks) >>
        tag!("{") >>
@@ -182,7 +180,7 @@ named!(hcl_hash<HashMap<String, JsonValue>>,
    )
 );
 
-named!(hcl_top<HashMap<String, JsonValue>>,
+complete_named!(hcl_top<HashMap<String, JsonValue>>,
     map!(hcl_key_values, |tuple_vec| {
         let mut top: HashMap<String, JsonValue> = HashMap::new();
         for (k, v) in tuple_vec.into_iter().rev() {
@@ -205,7 +203,7 @@ named!(hcl_top<HashMap<String, JsonValue>>,
 );
 
 // a bit odd if you ask me
-named!(hcl_value_nested_hash<JsonValue>, map!(
+complete_named!(hcl_value_nested_hash<JsonValue>, map!(
     // NOTE hcl allows arbitrarily deep nesting
     pair!(many0!(sp!(hcl_quoted_escaped_key)), hcl_value_hash),
     |(tuple_vec, value)| {
@@ -223,9 +221,9 @@ named!(hcl_value_nested_hash<JsonValue>, map!(
     }
 ));
 
-named!(hcl_value_hash<JsonValue>, map!(hcl_hash, |h| JsonValue::Object(h)));
+complete_named!(hcl_value_hash<JsonValue>, map!(hcl_hash, |h| JsonValue::Object(h)));
 
-named!(hcl_array<Vec<JsonValue>>, delimited!(
+complete_named!(hcl_array<Vec<JsonValue>>, delimited!(
     tag!("["),
     do_parse!(
         init: fold_many0!(
@@ -249,7 +247,7 @@ named!(hcl_array<Vec<JsonValue>>, delimited!(
     tag!("]")
 ));
 
-named!(hcl_value<JsonValue>, alt!(
+complete_named!(hcl_value<JsonValue>, alt!(
     hcl_hash                    => { |h|   JsonValue::Object(h)            } |
     hcl_array                   => { |v|   JsonValue::Array(v)             } |
     hcl_quoted_escaped_string   => { |s|   JsonValue::Str(s) } |

@@ -1,51 +1,68 @@
 use std::num::ParseIntError;
-use std::str::{self, FromStr};
 use std::u32;
 
+use nom;
 use nom::{digit, hex_digit};
+use nom::types::CompleteStr;
 
-named!(pub boolean<bool>,
-    map!(
-        alt_complete!(tag!("true") | tag!("false")),
-        |value: &[u8]| value == b"true"
-    )
+#[macro_export]
+macro_rules! complete_named (
+  ($name:ident, $submac:ident!( $($args:tt)* )) => (
+    fn $name<'a>( i: CompleteStr<'a> ) -> nom::IResult<CompleteStr<'a>, CompleteStr<'a>, u32> {
+      $submac!(i, $($args)*)
+    }
+  );
+  ($name:ident<$o:ty>, $submac:ident!( $($args:tt)* )) => (
+    fn $name<'a>( i: CompleteStr<'a> ) -> nom::IResult<CompleteStr<'a>, $o, u32> {
+      $submac!(i, $($args)*)
+    }
+  );
+  (pub $name:ident, $submac:ident!( $($args:tt)* )) => (
+    pub fn $name<'a>( i: CompleteStr<'a> ) -> nom::IResult<CompleteStr<'a>, CompleteStr<'a>, u32> {
+      $submac!(i, $($args)*)
+    }
+  );
+  (pub $name:ident<$o:ty>, $submac:ident!( $($args:tt)* )) => (
+    pub fn $name<'a>( i: CompleteStr<'a> ) -> nom::IResult<CompleteStr<'a>, $o, u32> {
+      $submac!(i, $($args)*)
+    }
+  );
 );
 
-named!(unsigned_float, recognize!(alt_complete!(
+complete_named!(pub boolean<bool>,map!(
+    alt!(tag!("true") | tag!("false")),
+    |value: CompleteStr| value == CompleteStr("true")
+));
+
+complete_named!(unsigned_float, recognize!(alt_complete!(
     delimited!(digit, tag!("."), opt!(complete!(digit))) |
     delimited!(opt!(digit), tag!("."), digit) | 
     digit
 )));
 
-named!(pub float<f32>, map_res!(
-    map_res!(
-        recognize!(alt_complete!(
-            delimited!(
-                pair!(opt!(alt!(tag!("+") | tag!("-"))), unsigned_float),
-                tag!("e"),
-                pair!(opt!(alt!(tag!("+") | tag!("-"))), unsigned_float)
-            ) |
-            unsigned_float
-        )),
-        str::from_utf8
-    ),
-    FromStr::from_str
+complete_named!(pub float<f32>, flat_map!(
+    recognize!(alt_complete!(
+        delimited!(
+            pair!(opt!(alt!(tag!("+") | tag!("-"))), unsigned_float),
+            tag!("e"),
+            pair!(opt!(alt!(tag!("+") | tag!("-"))), unsigned_float)
+        ) |
+        unsigned_float
+    )),
+    parse_to!(f32)
 ));
 
-fn to_i(i: &str) -> Result<u32, ParseIntError> { 
-    u32::from_str_radix(i, 16) 
+fn complete_to_i(i: CompleteStr) -> Result<u32, ParseIntError> { 
+    u32::from_str_radix(i.0, 16) 
 }
 
-named!(pub int<u32>, map_res!(
-    map_res!(
-        preceded!(tag!("0x"), hex_digit),
-        str::from_utf8
-    ),
-    to_i
+complete_named!(int<u32>, map_res!(
+    preceded!(tag!("0x"), hex_digit),
+    complete_to_i
 ));
         
 // TODO: add support for octal
-named!(pub number<f32>, alt_complete!(
+complete_named!(pub number<f32>, alt_complete!(
     map!(int, |i| { i as f32 }) |
     float
 ));

@@ -4,7 +4,9 @@
 use std::collections::HashMap;
 use std::str;
 
-use nom::IResult::Done;
+use nom;
+use nom::types::CompleteStr;
+use nom::Needed;
 
 use common::{boolean, float};
 use types::{JsonValue, ParseError};
@@ -14,49 +16,37 @@ use types::{JsonValue, ParseError};
 // this is not intended to mirror that
 
 pub fn parse_json(config: &str) -> Result<JsonValue, ParseError> {
-    match json(&config.as_bytes()[..]) {
-        Done(_, c) => Ok(c),
+    match json(CompleteStr(config)) {
+        Ok((_, c)) => Ok(c),
         _          => Err(0)
     }
 }
 
-named!(json<JsonValue>, map!(json_hash, |h| JsonValue::Object(h)));
+complete_named!(json<JsonValue>, map!(json_hash, |h| JsonValue::Object(h)));
 
-fn to_s(i:Vec<u8>) -> String { String::from_utf8_lossy(&i).into_owned() }
-
-named!(json_escaped_string<String>, map!(
+complete_named!(json_escaped_string<String>, 
     escaped_transform!(is_not!("\\\"\n"), '\\', alt!(
-        tag!("\\")       => { |_| &b"\\"[..] } |
-        tag!("\"")       => { |_| &b"\""[..] } |
-        tag!("n")        => { |_| &b"\n"[..] }
-    )), to_s
-));
+        tag!("\\")       => { |_| "\\" } |
+        tag!("\"")       => { |_| "\"" } |
+        tag!("n")        => { |_| "\n" }
+    )) 
+);
 
-named!(json_string<String>, delimited!(
+complete_named!(json_string<String>, delimited!(
     tag!("\""), 
-    map!(
-        fold_many0!(
-            json_escaped_string,
-            Vec::new(),
-            |mut acc: Vec<_>, item| {
-                acc.push(item);
-                acc
-            }
-        ),
-        |s| { s.join("") }
-    ),
+    json_escaped_string,
     tag!("\"")
 ));
 
-named!(json_array<Vec<JsonValue>>, ws!(delimited!(
+complete_named!(json_array<Vec<JsonValue>>, ws!(delimited!(
     tag!("["),
     separated_list!(tag!(","), json_value),
     tag!("]")
 )));
 
-named!(json_key_value<(String, JsonValue)>, ws!(separated_pair!(json_string, tag!(":"), json_value)));
+complete_named!(json_key_value<(String, JsonValue)>, ws!(separated_pair!(json_string, tag!(":"), json_value)));
 
-named!(json_hash<HashMap<String, JsonValue>>, ws!(map!(
+complete_named!(json_hash<HashMap<String, JsonValue>>, ws!(map!(
     delimited!(
         tag!("{"),
         separated_list!(tag!(","), json_key_value),
@@ -71,7 +61,7 @@ named!(json_hash<HashMap<String, JsonValue>>, ws!(map!(
     }
 )));
 
-named!(json_value<JsonValue>, ws!(alt!(
+complete_named!(json_value<JsonValue>, ws!(alt!(
     json_hash   => { |h|   JsonValue::Object(h)            } |
     json_array  => { |v|   JsonValue::Array(v)             } |
     json_string => { |s|   JsonValue::Str(String::from(s)) } |
