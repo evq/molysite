@@ -1,7 +1,6 @@
 //! This was modified from https://github.com/Geal/nom/blob/master/tests/json.rs
 //! Copyright (c) 2015-2016 Geoffroy Couprie - MIT License
 
-use std::collections::HashMap;
 use std::str;
 
 use nom;
@@ -9,20 +8,20 @@ use nom::types::CompleteStr;
 use nom::Needed;
 
 use common::{boolean, float};
-use types::{JsonValue, ParseError};
+use types::{Map, Number, ParseError, Value};
 
 // NOTE this json parser is only included for internal verification purposes
 // the standard hcl parser by hashicorp includes a nonstandrd json parser
 // this is not intended to mirror that
 
-pub fn parse_json(config: &str) -> Result<JsonValue, ParseError> {
+pub fn parse_json(config: &str) -> Result<Value, ParseError> {
     match json(CompleteStr(config)) {
         Ok((_, c)) => Ok(c),
         _          => Err(0)
     }
 }
 
-complete_named!(json<JsonValue>, map!(json_hash, |h| JsonValue::Object(h)));
+complete_named!(json<Value>, map!(json_hash, |h| Value::Object(h)));
 
 complete_named!(json_escaped_string<String>, 
     escaped_transform!(is_not!("\\\"\n"), '\\', alt!(
@@ -38,22 +37,22 @@ complete_named!(json_string<String>, delimited!(
     tag!("\"")
 ));
 
-complete_named!(json_array<Vec<JsonValue>>, ws!(delimited!(
+complete_named!(json_array<Vec<Value>>, ws!(delimited!(
     tag!("["),
     separated_list!(tag!(","), json_value),
     tag!("]")
 )));
 
-complete_named!(json_key_value<(String, JsonValue)>, ws!(separated_pair!(json_string, tag!(":"), json_value)));
+complete_named!(json_key_value<(String, Value)>, ws!(separated_pair!(json_string, tag!(":"), json_value)));
 
-complete_named!(json_hash<HashMap<String, JsonValue>>, ws!(map!(
+complete_named!(json_hash<Map<String, Value>>, ws!(map!(
     delimited!(
         tag!("{"),
         separated_list!(tag!(","), json_key_value),
         tag!("}")
     ),
     |tuple_vec| {
-        let mut h: HashMap<String, JsonValue> = HashMap::new();
+        let mut h: Map<String, Value> = Map::new();
         for (k, v) in tuple_vec {
             h.insert(String::from(k), v);
         }
@@ -61,12 +60,12 @@ complete_named!(json_hash<HashMap<String, JsonValue>>, ws!(map!(
     }
 )));
 
-complete_named!(json_value<JsonValue>, ws!(alt!(
-    json_hash   => { |h|   JsonValue::Object(h)            } |
-    json_array  => { |v|   JsonValue::Array(v)             } |
-    json_string => { |s|   JsonValue::Str(String::from(s)) } |
-    float       => { |num| JsonValue::Num(num)             } |
-    boolean     => { |b|   JsonValue::Boolean(b)           }
+complete_named!(json_value<Value>, ws!(alt!(
+    json_hash   => { |h|   Value::Object(h)            } |
+    json_array  => { |v|   Value::Array(v)             } |
+    json_string => { |s|   Value::String(String::from(s)) } |
+    float       => { |num| Value::Number(Number::from_f64(num as f64).unwrap()) } |
+    boolean     => { |b|   Value::Bool(b)           }
 )));
 
 #[test]
@@ -75,11 +74,11 @@ fn json_bool_test() {
   \"b\": \"false\"
   }";
 
-    if let Ok(JsonValue::Object(dict)) = parse_json(test) {
-        if let Some(&JsonValue::Boolean(ref resp)) = dict.get("a") {
+    if let Ok(Value::Object(dict)) = parse_json(test) {
+        if let Some(&Value::Bool(ref resp)) = dict.get("a") {
             assert_eq!(true, *resp);
         }
-        if let Some(&JsonValue::Boolean(ref resp)) = dict.get("b") {
+        if let Some(&Value::Bool(ref resp)) = dict.get("b") {
             assert_eq!(false, *resp);
         }
         return
@@ -94,11 +93,11 @@ fn json_hash_test() {
   \"b\": \"x\"
   }";
 
-    if let Ok(JsonValue::Object(dict)) = parse_json(test) {
-        if let Some(&JsonValue::Num(ref resp)) = dict.get("a") {
-            assert_eq!(42., *resp);
+    if let Ok(Value::Object(dict)) = parse_json(test) {
+        if let Some(&Value::Number(ref resp)) = dict.get("a") {
+            assert_eq!(Number::from_f64(42.).unwrap(), *resp);
         }
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("b") {
+        if let Some(&Value::String(ref resp)) = dict.get("b") {
             assert_eq!("x", *resp);
         }
         return
@@ -114,23 +113,23 @@ fn json_parse_example_test() {
   }
   }";
 
-    if let Ok(JsonValue::Object(dict)) = parse_json(test) {
-        if let Some(&JsonValue::Num(ref resp)) = dict.get("a") {
-            assert_eq!(42., *resp);
+    if let Ok(Value::Object(dict)) = parse_json(test) {
+        if let Some(&Value::Number(ref resp)) = dict.get("a") {
+            assert_eq!(Number::from_f64(42.).unwrap(), *resp);
         }
-        if let Some(&JsonValue::Array(ref arr)) = dict.get("b") {
-            if let Some(&JsonValue::Str(ref resp)) = arr.get(0) {
+        if let Some(&Value::Array(ref arr)) = dict.get("b") {
+            if let Some(&Value::String(ref resp)) = arr.get(0) {
                 assert_eq!("x", *resp);
             }
-            if let Some(&JsonValue::Str(ref resp)) = arr.get(1) {
+            if let Some(&Value::String(ref resp)) = arr.get(1) {
                 assert_eq!("y", *resp);
             }
-            if let Some(&JsonValue::Num(ref resp)) = arr.get(2) {
-                assert_eq!(12., *resp);
+            if let Some(&Value::Number(ref resp)) = arr.get(2) {
+                assert_eq!(Number::from_f64(12.).unwrap(), *resp);
             }
         }
-        if let Some(&JsonValue::Object(ref dict)) = dict.get("c") {
-            if let Some(&JsonValue::Str(ref resp)) = dict.get("hello") {
+        if let Some(&Value::Object(ref dict)) = dict.get("c") {
+            if let Some(&Value::String(ref resp)) = dict.get("hello") {
                 assert_eq!("world", *resp);
             }
         }

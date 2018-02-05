@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::str;
 use std::string::String;
 
@@ -7,17 +6,16 @@ use nom::types::CompleteStr;
 use nom::{Needed, ExtendInto, alphanumeric, eol, multispace, not_line_ending};
 
 use common::{boolean, number};
-use types::{JsonValue, ParseError};
+use types::{Map, Number, ParseError, Value};
 
-
-pub fn parse_hcl(config: &str) -> Result<JsonValue, ParseError> {
+pub fn parse_hcl(config: &str) -> Result<Value, ParseError> {
     match hcl(CompleteStr(config)) {
         Ok((_, c)) => Ok(c),
         _          => Err(0)
     }
 }
 
-complete_named!(hcl<JsonValue>, map!(hcl_top, |h| JsonValue::Object(h)));
+complete_named!(hcl<Value>, map!(hcl_top, |h| Value::Object(h)));
 
 complete_named!(end_of_line, alt!(eof!() | eol));
 
@@ -145,7 +143,7 @@ macro_rules! sp (
     )
 );
 
-complete_named!(hcl_key_value<(String, JsonValue)>, sp!(alt!(
+complete_named!(hcl_key_value<(String, Value)>, sp!(alt!(
     separated_pair!(hcl_key, tag!("="), hcl_value_nested_hash) |
     separated_pair!(hcl_key, tag!("="), hcl_value) |
     pair!(hcl_key, hcl_value_nested_hash)
@@ -163,13 +161,13 @@ complete_named!(blanks,
     do_parse!(many0!(alt!(tag!(",") | multispace | comment_one_line | comment_block)) >> (CompleteStr("")))
 );
 
-complete_named!(hcl_key_values<Vec<(String, JsonValue)>>,
+complete_named!(hcl_key_values<Vec<(String, Value)>>,
     many0!(do_parse!(
         opt!(blanks) >> out: hcl_key_value >> opt!(blanks) >> (out)
     ))
 );
 
-complete_named!(hcl_hash<HashMap<String, JsonValue>>, 
+complete_named!(hcl_hash<Map<String, Value>>, 
    do_parse!(
        opt!(blanks) >>
        tag!("{") >>
@@ -181,19 +179,19 @@ complete_named!(hcl_hash<HashMap<String, JsonValue>>,
 );
 
 #[cfg(not(feature="arraynested"))]
-complete_named!(hcl_top<HashMap<String, JsonValue>>,
+complete_named!(hcl_top<Map<String, Value>>,
     map!(hcl_key_values, |tuple_vec| {
-        let mut top: HashMap<String, JsonValue> = HashMap::new();
+        let mut top: Map<String, Value> = Map::new();
         for (k, v) in tuple_vec.into_iter().rev() {
             // FIXME use deep merge
             if top.contains_key(&k) {
-                if let JsonValue::Object(ref val_dict) = v {
-                    if let Some(current) = top.remove(&k) {
-                        if let JsonValue::Object(ref top_dict) = current {
+                if let Value::Object(ref val_dict) = v {
+                    if let Some(mut current) = top.remove(&k) {
+                        if let Value::Object(ref mut top_dict) = current {
                             let mut copy = top_dict.clone();
                             let mut val_copy = val_dict.clone();
                             copy.extend(val_copy);
-                            top.insert(k, JsonValue::Object(copy));
+                            top.insert(k, Value::Object(copy));
                             continue;
                         } else {
                             top.insert(k, current);
@@ -209,17 +207,17 @@ complete_named!(hcl_top<HashMap<String, JsonValue>>,
 );
 
 #[cfg(feature="arraynested")]
-complete_named!(hcl_top<HashMap<String, JsonValue>>,
+complete_named!(hcl_top<Map<String, Value>>,
     map!(hcl_key_values, |tuple_vec| {
-        let mut top: HashMap<String, JsonValue> = HashMap::new();
+        let mut top: Map<String, Value> = Map::new();
         for (k, v) in tuple_vec.into_iter().rev() {
             if top.contains_key(&k) {
-                if let JsonValue::Array(ref v_a) = v {
+                if let Value::Array(ref v_a) = v {
                     if let Some(current) = top.remove(&k) {
-                        if let JsonValue::Array(ref a) = current {
+                        if let Value::Array(ref a) = current {
                             let mut copy = v_a.to_vec();
                             copy.extend(a.to_vec());
-                            top.insert(k, JsonValue::Array(copy));
+                            top.insert(k, Value::Array(copy));
                             continue;
                         }
                     }
@@ -232,15 +230,15 @@ complete_named!(hcl_top<HashMap<String, JsonValue>>,
 );
 
 #[cfg(not(feature="arraynested"))]
-complete_named!(hcl_value_nested_hash<JsonValue>, map!(
+complete_named!(hcl_value_nested_hash<Value>, map!(
     // NOTE hcl allows arbitrarily deep nesting
     pair!(many0!(sp!(hcl_quoted_escaped_key)), hcl_value_hash),
     |(tuple_vec, value)| {
         let mut cur = value;
         for parent in tuple_vec.into_iter().rev() {
-            let mut h: HashMap<String, JsonValue> = HashMap::new();
+            let mut h: Map<String, Value> = Map::new();
             h.insert(parent.to_string(), cur);
-            cur = JsonValue::Object(h);
+            cur = Value::Object(h);
         }
         cur
     }
@@ -248,27 +246,27 @@ complete_named!(hcl_value_nested_hash<JsonValue>, map!(
 
 // a bit odd if you ask me
 #[cfg(feature="arraynested")]
-complete_named!(hcl_value_nested_hash<JsonValue>, map!(
+complete_named!(hcl_value_nested_hash<Value>, map!(
     // NOTE hcl allows arbitrarily deep nesting
     pair!(many0!(sp!(hcl_quoted_escaped_key)), hcl_value_hash),
     |(tuple_vec, value)| {
         let mut cur = value;
         for parent in tuple_vec.into_iter().rev() {
-            let mut inner: Vec<JsonValue> = Vec::new();
+            let mut inner: Vec<Value> = Vec::new();
             inner.push(cur);
-            let mut h: HashMap<String, JsonValue> = HashMap::new();
-            h.insert(parent.to_string(), JsonValue::Array(inner));
-            cur = JsonValue::Object(h);
+            let mut h: Map<String, Value> = Map::new();
+            h.insert(parent.to_string(), Value::Array(inner));
+            cur = Value::Object(h);
         }
-        let mut outer: Vec<JsonValue> = Vec::new();
+        let mut outer: Vec<Value> = Vec::new();
         outer.push(cur);
-        JsonValue::Array(outer)
+        Value::Array(outer)
     }
 ));
 
-complete_named!(hcl_value_hash<JsonValue>, map!(hcl_hash, |h| JsonValue::Object(h)));
+complete_named!(hcl_value_hash<Value>, map!(hcl_hash, |h| Value::Object(h)));
 
-complete_named!(hcl_array<Vec<JsonValue>>, delimited!(
+complete_named!(hcl_array<Vec<Value>>, delimited!(
     tag!("["),
     do_parse!(
         init: fold_many0!(
@@ -292,21 +290,21 @@ complete_named!(hcl_array<Vec<JsonValue>>, delimited!(
     tag!("]")
 ));
 
-complete_named!(hcl_value<JsonValue>, alt!(
-    hcl_hash                    => { |h|   JsonValue::Object(h)            } |
-    hcl_array                   => { |v|   JsonValue::Array(v)             } |
-    hcl_quoted_escaped_string   => { |s|   JsonValue::Str(s) } |
-    hcl_multiline_string        => { |s|   JsonValue::Str(s) } |
-    number                      => { |num| JsonValue::Num(num)             } |
-    boolean                     => { |b|   JsonValue::Boolean(b)           }
+complete_named!(hcl_value<Value>, alt!(
+    hcl_hash                    => { |h|   Value::Object(h)            } |
+    hcl_array                   => { |v|   Value::Array(v)             } |
+    hcl_quoted_escaped_string   => { |s|   Value::String(s) } |
+    hcl_multiline_string        => { |s|   Value::String(s) } |
+    number                      => { |num| Value::Number(Number::from_f64(num as f64).unwrap()) } |
+    boolean                     => { |b|   Value::Bool(b)           }
 ));
 
 #[test]
 fn hcl_hex_num() {
     let test = "foo = 0x42";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Num(ref resp)) = dict.get("foo") {
-            return assert_eq!(66., *resp);
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Number(ref resp)) = dict.get("foo") {
+            return assert_eq!(Number::from_f64(66.).unwrap(), *resp);
         }
     }
     panic!("object did not parse");
@@ -316,8 +314,8 @@ fn hcl_hex_num() {
 #[test]
 fn hcl_string_empty() {
     let test = "foo = \"\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("", resp);
         }
     }
@@ -327,8 +325,8 @@ fn hcl_string_empty() {
 #[test]
 fn hcl_string_with_escaped_quote_test() {
     let test = "foo = \"bar\\\"foo\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("bar\"foo", resp);
         }
     }
@@ -338,8 +336,8 @@ fn hcl_string_with_escaped_quote_test() {
 #[test]
 fn hcl_string_with_escaped_newline_test() {
     let test = "foo = \"bar\\nfoo\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("bar\nfoo", resp);
         }
     }
@@ -349,8 +347,8 @@ fn hcl_string_with_escaped_newline_test() {
 #[test]
 fn hcl_string_with_space_test() {
     let test = "foo = \"bar foo\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("bar foo", resp);
         }
     }
@@ -360,8 +358,8 @@ fn hcl_string_with_space_test() {
 #[test]
 fn hcl_string_with_template_test() {
     let test = "foo = \"${bar\"foo}\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("${bar\"foo}", resp);
         }
     }
@@ -371,8 +369,8 @@ fn hcl_string_with_template_test() {
 #[test]
 fn hcl_string_with_escapes_and_template_test() {
     let test = "foo = \"wow\\\"wow${bar\"foo}\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("wow\"wow${bar\"foo}", resp);
         }
     }
@@ -382,8 +380,8 @@ fn hcl_string_with_escapes_and_template_test() {
 #[test]
 fn hcl_string_multi_with_template() {
     let test = "foo = \"wow\"\nbar= \"${bar\"foo}\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo") {
             return assert_eq!("wow", resp);
         }
     }
@@ -394,11 +392,11 @@ fn hcl_string_multi_with_template() {
 #[test]
 fn hcl_block_empty_key() {
     let test = "foo \"\" {\nbar = 1\n}";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Object(ref dict)) = dict.get("foo") {
-            if let Some(&JsonValue::Object(ref dict)) = dict.get("") {
-                if let Some(&JsonValue::Num(ref resp)) = dict.get("bar") {
-                    return assert_eq!(1., *resp);
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Object(ref dict)) = dict.get("foo") {
+            if let Some(&Value::Object(ref dict)) = dict.get("") {
+                if let Some(&Value::Number(ref resp)) = dict.get("bar") {
+                    return assert_eq!(Number::from_f64(1.).unwrap(), *resp);
                 }
             }
         }
@@ -410,13 +408,13 @@ fn hcl_block_empty_key() {
 #[test]
 fn hcl_block_empty_key() {
     let test = "foo \"\" {\nbar = 1\n}";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Array(ref array)) = dict.get("foo") {
-            if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                if let Some(&JsonValue::Array(ref array)) = dict.get("") {
-                    if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                        if let Some(&JsonValue::Num(ref resp)) = dict.get("bar") {
-                            return assert_eq!(1., *resp);
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Array(ref array)) = dict.get("foo") {
+            if let Some(&Value::Object(ref dict)) = array.get(0) {
+                if let Some(&Value::Array(ref array)) = dict.get("") {
+                    if let Some(&Value::Object(ref dict)) = array.get(0) {
+                        if let Some(&Value::Number(ref resp)) = dict.get("bar") {
+                            return assert_eq!(Number::from_f64(1.).unwrap(), *resp);
                         }
                     }
                 }
@@ -430,10 +428,10 @@ fn hcl_block_empty_key() {
 #[test]
 fn hcl_block_key() {
     let test = "potato \"salad\\\"is\" {\nnot = \"real\"\n}";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Object(ref dict)) = dict.get("potato") {
-            if let Some(&JsonValue::Object(ref dict)) = dict.get("salad\"is") {
-                if let Some(&JsonValue::Str(ref resp)) = dict.get("not") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Object(ref dict)) = dict.get("potato") {
+            if let Some(&Value::Object(ref dict)) = dict.get("salad\"is") {
+                if let Some(&Value::String(ref resp)) = dict.get("not") {
                     return assert_eq!("real", resp);
                 }
             }
@@ -446,12 +444,12 @@ fn hcl_block_key() {
 #[test]
 fn hcl_block_key() {
     let test = "potato \"salad\\\"is\" {\nnot = \"real\"\n}";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Array(ref array)) = dict.get("potato") {
-            if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                if let Some(&JsonValue::Array(ref array)) = dict.get("salad\"is") {
-                    if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                        if let Some(&JsonValue::Str(ref resp)) = dict.get("not") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Array(ref array)) = dict.get("potato") {
+            if let Some(&Value::Object(ref dict)) = array.get(0) {
+                if let Some(&Value::Array(ref array)) = dict.get("salad\"is") {
+                    if let Some(&Value::Object(ref dict)) = array.get(0) {
+                        if let Some(&Value::String(ref resp)) = dict.get("not") {
                             return assert_eq!("real", resp);
                         }
                     }
@@ -466,11 +464,11 @@ fn hcl_block_key() {
 #[test]
 fn hcl_block_nested_key() {
     let test = "potato \"salad\" \"is\" {\nnot = \"real\"\n}";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Object(ref dict)) = dict.get("potato") {
-            if let Some(&JsonValue::Object(ref dict)) = dict.get("salad") {
-                if let Some(&JsonValue::Object(ref dict)) = dict.get("is") {
-                    if let Some(&JsonValue::Str(ref resp)) = dict.get("not") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Object(ref dict)) = dict.get("potato") {
+            if let Some(&Value::Object(ref dict)) = dict.get("salad") {
+                if let Some(&Value::Object(ref dict)) = dict.get("is") {
+                    if let Some(&Value::String(ref resp)) = dict.get("not") {
                         return assert_eq!("real", resp);
                     }
                 }
@@ -484,14 +482,14 @@ fn hcl_block_nested_key() {
 #[test]
 fn hcl_block_nested_key() {
     let test = "potato \"salad\" \"is\" {\nnot = \"real\"\n}";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Array(ref array)) = dict.get("potato") {
-            if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                if let Some(&JsonValue::Array(ref array)) = dict.get("salad") {
-                    if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                        if let Some(&JsonValue::Array(ref array)) = dict.get("is") {
-                            if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
-                                if let Some(&JsonValue::Str(ref resp)) = dict.get("not") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Array(ref array)) = dict.get("potato") {
+            if let Some(&Value::Object(ref dict)) = array.get(0) {
+                if let Some(&Value::Array(ref array)) = dict.get("salad") {
+                    if let Some(&Value::Object(ref dict)) = array.get(0) {
+                        if let Some(&Value::Array(ref array)) = dict.get("is") {
+                            if let Some(&Value::Object(ref dict)) = array.get(0) {
+                                if let Some(&Value::String(ref resp)) = dict.get("not") {
                                     return assert_eq!("real", resp);
                                 }
                             }
@@ -507,15 +505,15 @@ fn hcl_block_nested_key() {
 #[test]
 fn hcl_key_chars() {
     let test = "foo_bar = \"bar\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo_bar") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo_bar") {
             return assert_eq!("bar", resp);
         }
     }
 
     let test = "foo_bar = \"bar\"";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Str(ref resp)) = dict.get("foo_bar") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::String(ref resp)) = dict.get("foo_bar") {
             return assert_eq!("bar", resp);
         }
     }
@@ -533,15 +531,15 @@ fn hcl_slice_expand() {
 service \"bar\" {
   key = \"value\"
 }";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Object(ref dict)) = dict.get("service") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Object(ref dict)) = dict.get("service") {
             let mut pass = false;
-            if let Some(&JsonValue::Object(_)) = dict.get("foo") {
+            if let Some(&Value::Object(_)) = dict.get("foo") {
                 pass = true;
             }
             if !pass { panic!("missing nested object") }
             pass = false;
-            if let Some(&JsonValue::Object(_)) = dict.get("bar") {
+            if let Some(&Value::Object(_)) = dict.get("bar") {
                 pass = true;
             }
             if !pass { panic!("missing nested object") }
@@ -561,15 +559,15 @@ fn hcl_slice_expand() {
 service \"bar\" {
   key = \"value\"
 }";
-    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        if let Some(&JsonValue::Array(ref array)) = dict.get("service") {
+    if let Ok(Value::Object(dict)) = parse_hcl(test) {
+        if let Some(&Value::Array(ref array)) = dict.get("service") {
             let mut pass = false;
-            if let Some(&JsonValue::Object(_)) = array.get(0) {
+            if let Some(&Value::Object(_)) = array.get(0) {
                 pass = true;
             }
             if !pass { panic!("missing nested object") }
             pass = false;
-            if let Some(&JsonValue::Object(_)) = array.get(1) {
+            if let Some(&Value::Object(_)) = array.get(1) {
                 pass = true;
             }
             if !pass { panic!("missing nested object") }
