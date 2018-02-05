@@ -7,6 +7,7 @@ use std::path::Path;
 use molysite::hcl::parse_hcl;
 use molysite::json::parse_json;
 
+#[cfg(feature="arraynested")]
 macro_rules! fixture_tests {
     ($($name:ident: $value:expr,)*) => {
     $(
@@ -19,6 +20,7 @@ macro_rules! fixture_tests {
     }
 }
 
+#[cfg(feature="arraynested")]
 fixture_tests! {
     test_fixture_assign_deep: ("assign_deep", true),
     test_fixture_basic: ("basic", true),
@@ -59,6 +61,7 @@ fixture_tests! {
     //test_fixture_unterminated_brace: ("unterminated_brace", false),
 }
 
+#[allow(dead_code)]
 fn test_fixture(case: &str, expect_pass: bool) {
     let mut hcl = String::new();
     let mut json = String::new();

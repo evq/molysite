@@ -180,6 +180,35 @@ complete_named!(hcl_hash<HashMap<String, JsonValue>>,
    )
 );
 
+#[cfg(not(feature="arraynested"))]
+complete_named!(hcl_top<HashMap<String, JsonValue>>,
+    map!(hcl_key_values, |tuple_vec| {
+        let mut top: HashMap<String, JsonValue> = HashMap::new();
+        for (k, v) in tuple_vec.into_iter().rev() {
+            // FIXME use deep merge
+            if top.contains_key(&k) {
+                if let JsonValue::Object(ref val_dict) = v {
+                    if let Some(current) = top.remove(&k) {
+                        if let JsonValue::Object(ref top_dict) = current {
+                            let mut copy = top_dict.clone();
+                            let mut val_copy = val_dict.clone();
+                            copy.extend(val_copy);
+                            top.insert(k, JsonValue::Object(copy));
+                            continue;
+                        } else {
+                            top.insert(k, current);
+                            continue;
+                        }
+                    }
+                }
+            }
+            top.insert(k, v);
+        }
+        top
+    })
+);
+
+#[cfg(feature="arraynested")]
 complete_named!(hcl_top<HashMap<String, JsonValue>>,
     map!(hcl_key_values, |tuple_vec| {
         let mut top: HashMap<String, JsonValue> = HashMap::new();
@@ -202,7 +231,23 @@ complete_named!(hcl_top<HashMap<String, JsonValue>>,
     })
 );
 
+#[cfg(not(feature="arraynested"))]
+complete_named!(hcl_value_nested_hash<JsonValue>, map!(
+    // NOTE hcl allows arbitrarily deep nesting
+    pair!(many0!(sp!(hcl_quoted_escaped_key)), hcl_value_hash),
+    |(tuple_vec, value)| {
+        let mut cur = value;
+        for parent in tuple_vec.into_iter().rev() {
+            let mut h: HashMap<String, JsonValue> = HashMap::new();
+            h.insert(parent.to_string(), cur);
+            cur = JsonValue::Object(h);
+        }
+        cur
+    }
+));
+
 // a bit odd if you ask me
+#[cfg(feature="arraynested")]
 complete_named!(hcl_value_nested_hash<JsonValue>, map!(
     // NOTE hcl allows arbitrarily deep nesting
     pair!(many0!(sp!(hcl_quoted_escaped_key)), hcl_value_hash),
@@ -345,6 +390,23 @@ fn hcl_string_multi_with_template() {
     panic!("object did not parse");
 }
 
+#[cfg(not(feature="arraynested"))]
+#[test]
+fn hcl_block_empty_key() {
+    let test = "foo \"\" {\nbar = 1\n}";
+    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
+        if let Some(&JsonValue::Object(ref dict)) = dict.get("foo") {
+            if let Some(&JsonValue::Object(ref dict)) = dict.get("") {
+                if let Some(&JsonValue::Num(ref resp)) = dict.get("bar") {
+                    return assert_eq!(1., *resp);
+                }
+            }
+        }
+    }
+    panic!("object did not parse");
+}
+
+#[cfg(feature="arraynested")]
 #[test]
 fn hcl_block_empty_key() {
     let test = "foo \"\" {\nbar = 1\n}";
@@ -364,6 +426,23 @@ fn hcl_block_empty_key() {
     panic!("object did not parse");
 }
 
+#[cfg(not(feature="arraynested"))]
+#[test]
+fn hcl_block_key() {
+    let test = "potato \"salad\\\"is\" {\nnot = \"real\"\n}";
+    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
+        if let Some(&JsonValue::Object(ref dict)) = dict.get("potato") {
+            if let Some(&JsonValue::Object(ref dict)) = dict.get("salad\"is") {
+                if let Some(&JsonValue::Str(ref resp)) = dict.get("not") {
+                    return assert_eq!("real", resp);
+                }
+            }
+        }
+    }
+    panic!("object did not parse");
+}
+
+#[cfg(feature="arraynested")]
 #[test]
 fn hcl_block_key() {
     let test = "potato \"salad\\\"is\" {\nnot = \"real\"\n}";
@@ -383,11 +462,29 @@ fn hcl_block_key() {
     panic!("object did not parse");
 }
 
+#[cfg(not(feature="arraynested"))]
 #[test]
 fn hcl_block_nested_key() {
     let test = "potato \"salad\" \"is\" {\nnot = \"real\"\n}";
     if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
-        println!("{:?}", dict);
+        if let Some(&JsonValue::Object(ref dict)) = dict.get("potato") {
+            if let Some(&JsonValue::Object(ref dict)) = dict.get("salad") {
+                if let Some(&JsonValue::Object(ref dict)) = dict.get("is") {
+                    if let Some(&JsonValue::Str(ref resp)) = dict.get("not") {
+                        return assert_eq!("real", resp);
+                    }
+                }
+            }
+        }
+    }
+    panic!("object did not parse");
+}
+
+#[cfg(feature="arraynested")]
+#[test]
+fn hcl_block_nested_key() {
+    let test = "potato \"salad\" \"is\" {\nnot = \"real\"\n}";
+    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
         if let Some(&JsonValue::Array(ref array)) = dict.get("potato") {
             if let Some(&JsonValue::Object(ref dict)) = array.get(0) {
                 if let Some(&JsonValue::Array(ref array)) = dict.get("salad") {
@@ -426,6 +523,35 @@ fn hcl_key_chars() {
     panic!("object did not parse");
 }
 
+#[cfg(not(feature="arraynested"))]
+#[test]
+fn hcl_slice_expand() {
+    let test = "service \"foo\" {
+  key = \"value\"
+}
+
+service \"bar\" {
+  key = \"value\"
+}";
+    if let Ok(JsonValue::Object(dict)) = parse_hcl(test) {
+        if let Some(&JsonValue::Object(ref dict)) = dict.get("service") {
+            let mut pass = false;
+            if let Some(&JsonValue::Object(_)) = dict.get("foo") {
+                pass = true;
+            }
+            if !pass { panic!("missing nested object") }
+            pass = false;
+            if let Some(&JsonValue::Object(_)) = dict.get("bar") {
+                pass = true;
+            }
+            if !pass { panic!("missing nested object") }
+            return
+        }
+    }
+    panic!("object did not parse")
+}
+
+#[cfg(feature="arraynested")]
 #[test]
 fn hcl_slice_expand() {
     let test = "service \"foo\" {
@@ -447,6 +573,8 @@ service \"bar\" {
                 pass = true;
             }
             if !pass { panic!("missing nested object") }
+            return
         }
     }
+    panic!("object did not parse")
 }
