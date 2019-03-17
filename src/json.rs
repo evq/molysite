@@ -6,8 +6,8 @@ use std::str;
 
 use nom::IResult::Done;
 
-use common::{boolean, float};
-use types::{JsonValue, ParseError};
+use crate::common::{boolean, float};
+use crate::types::{JsonValue, ParseError};
 
 // NOTE this json parser is only included for internal verification purposes
 // the standard hcl parser by hashicorp includes a nonstandrd json parser

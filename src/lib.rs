@@ -1,5 +1,3 @@
-#![feature(str_escape)]
-
 #[macro_use]
 extern crate nom;
 

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::str::{self, FromStr};
+use std::str;
 use std::string::String;
 
 use nom::IResult::Done;
 use nom::{alphanumeric, eol, multispace, not_line_ending};
 
-use common::{boolean, number};
-use types::{JsonValue, ParseError};
+use crate::common::{boolean, number};
+use crate::types::{JsonValue, ParseError};
 
 pub fn parse_hcl(config: &str) -> Result<JsonValue, ParseError> {
     match hcl(&config.as_bytes()[..]) {
@@ -112,7 +112,7 @@ named!(
             let mut min_indent = 80;
             if let Some(_) = indent {
                 for (i, line) in lines.clone().into_iter().enumerate() {
-                    let indent_num = line.len() - line.trim_left().len();
+                    let indent_num = line.len() - line.trim_start().len();
                     if indent_num < min_indent {
                         min_indent = indent_num;
                     }

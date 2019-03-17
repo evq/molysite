@@ -2,7 +2,7 @@
 authors = ["eV <ev@7pr.xyz>"]
 name = "molysite"
 version = "0.1.0"
+edition = "2018"
 
-[dependencies.nom]
-features = ["nightly"]
-version = "^3.2"
+[dependencies]
+nom = "^3.2"
