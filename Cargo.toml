@@ -20,3 +20,4 @@ version = "1.0.27"
 [features]
 arraynested = []
 withserde = ["serde_json"]
+default = ["arraynested"]

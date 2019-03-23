@@ -3,7 +3,7 @@ use std::string::String;
 
 use nom;
 use nom::types::CompleteStr;
-use nom::{alphanumeric, eol, multispace, not_line_ending, ExtendInto, Needed};
+use nom::{alphanumeric, eol, multispace, not_line_ending, ExtendInto};
 
 use crate::common::{boolean, number};
 use crate::types::{Map, Number, ParseError, Value};
@@ -104,7 +104,7 @@ complete_named!(
             let mut min_indent = 80;
             if let Some(_) = indent {
                 for (i, line) in lines.clone().into_iter().enumerate() {
-                    let indent_num = line.len() - line.trim_left().len();
+                    let indent_num = line.len() - line.trim_start().len();
                     if indent_num < min_indent {
                         min_indent = indent_num;
                     }
@@ -232,7 +232,7 @@ complete_named!(
                     if let Some(mut current) = top.remove(&k) {
                         if let Value::Object(ref mut top_dict) = current {
                             let mut copy = top_dict.clone();
-                            let mut val_copy = val_dict.clone();
+                            let val_copy = val_dict.clone();
                             copy.extend(val_copy);
                             top.insert(k, Value::Object(copy));
                             continue;
