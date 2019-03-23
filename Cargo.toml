@@ -4,8 +4,7 @@ name = "molysite"
 version = "0.1.0"
 
 [dependencies.nom]
-features = ["nightly"]
-path = "../nom"
+version = "^4.2"
 
 [dependencies.serde_json]
 optional = true
