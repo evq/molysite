@@ -11,11 +11,14 @@ named!(pub boolean<bool>,
     )
 );
 
-named!(unsigned_float, recognize!(alt_complete!(
-    delimited!(digit, tag!("."), opt!(complete!(digit))) |
-    delimited!(opt!(digit), tag!("."), digit) | 
-    digit
-)));
+named!(
+    unsigned_float,
+    recognize!(alt_complete!(
+        delimited!(digit, tag!("."), opt!(complete!(digit)))
+            | delimited!(opt!(digit), tag!("."), digit)
+            | digit
+    ))
+);
 
 named!(pub float<f32>, map_res!(
     map_res!(
@@ -32,8 +35,8 @@ named!(pub float<f32>, map_res!(
     FromStr::from_str
 ));
 
-fn to_i(i: &str) -> Result<u32, ParseIntError> { 
-    u32::from_str_radix(i, 16) 
+fn to_i(i: &str) -> Result<u32, ParseIntError> {
+    u32::from_str_radix(i, 16)
 }
 
 named!(pub int<u32>, map_res!(
@@ -43,7 +46,7 @@ named!(pub int<u32>, map_res!(
     ),
     to_i
 ));
-        
+
 // TODO: add support for octal
 named!(pub number<f32>, alt_complete!(
     map!(int, |i| { i as f32 }) |

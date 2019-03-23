@@ -6,8 +6,8 @@ use std::str;
 
 use nom::IResult::Done;
 
-use common::{boolean, float};
-use types::{JsonValue, ParseError};
+use crate::common::{boolean, float};
+use crate::types::{JsonValue, ParseError};
 
 // NOTE this json parser is only included for internal verification purposes
 // the standard hcl parser by hashicorp includes a nonstandrd json parser
@@ -16,68 +16,89 @@ use types::{JsonValue, ParseError};
 pub fn parse_json(config: &str) -> Result<JsonValue, ParseError> {
     match json(&config.as_bytes()[..]) {
         Done(_, c) => Ok(c),
-        _          => Err(0)
+        _ => Err(0),
     }
 }
 
 named!(json<JsonValue>, map!(json_hash, |h| JsonValue::Object(h)));
 
-fn to_s(i:Vec<u8>) -> String { String::from_utf8_lossy(&i).into_owned() }
+fn to_s(i: Vec<u8>) -> String {
+    String::from_utf8_lossy(&i).into_owned()
+}
 
-named!(json_escaped_string<String>, map!(
-    escaped_transform!(is_not!("\\\"\n"), '\\', alt!(
-        tag!("\\")       => { |_| &b"\\"[..] } |
-        tag!("\"")       => { |_| &b"\""[..] } |
-        tag!("n")        => { |_| &b"\n"[..] }
-    )), to_s
-));
-
-named!(json_string<String>, delimited!(
-    tag!("\""), 
+named!(
+    json_escaped_string<String>,
     map!(
-        fold_many0!(
-            json_escaped_string,
-            Vec::new(),
-            |mut acc: Vec<_>, item| {
+        escaped_transform!(
+            is_not!("\\\"\n"),
+            '\\',
+            alt!(
+                tag!("\\")       => { |_| &b"\\"[..] } |
+                tag!("\"")       => { |_| &b"\""[..] } |
+                tag!("n")        => { |_| &b"\n"[..] }
+            )
+        ),
+        to_s
+    )
+);
+
+named!(
+    json_string<String>,
+    delimited!(
+        tag!("\""),
+        map!(
+            fold_many0!(json_escaped_string, Vec::new(), |mut acc: Vec<_>, item| {
                 acc.push(item);
                 acc
-            }
+            }),
+            |s| s.join("")
         ),
-        |s| { s.join("") }
-    ),
-    tag!("\"")
-));
+        tag!("\"")
+    )
+);
 
-named!(json_array<Vec<JsonValue>>, ws!(delimited!(
-    tag!("["),
-    separated_list!(tag!(","), json_value),
-    tag!("]")
-)));
+named!(
+    json_array<Vec<JsonValue>>,
+    ws!(delimited!(
+        tag!("["),
+        separated_list!(tag!(","), json_value),
+        tag!("]")
+    ))
+);
 
-named!(json_key_value<(String, JsonValue)>, ws!(separated_pair!(json_string, tag!(":"), json_value)));
+named!(
+    json_key_value<(String, JsonValue)>,
+    ws!(separated_pair!(json_string, tag!(":"), json_value))
+);
 
-named!(json_hash<HashMap<String, JsonValue>>, ws!(map!(
-    delimited!(
-        tag!("{"),
-        separated_list!(tag!(","), json_key_value),
-        tag!("}")
-    ),
-    |tuple_vec| {
-        let mut h: HashMap<String, JsonValue> = HashMap::new();
-        for (k, v) in tuple_vec {
-            h.insert(String::from(k), v);
+named!(
+    json_hash<HashMap<String, JsonValue>>,
+    ws!(map!(
+        delimited!(
+            tag!("{"),
+            separated_list!(tag!(","), json_key_value),
+            tag!("}")
+        ),
+        |tuple_vec| {
+            let mut h: HashMap<String, JsonValue> = HashMap::new();
+            for (k, v) in tuple_vec {
+                h.insert(String::from(k), v);
+            }
+            h
         }
-        h
-    }
-)));
+    ))
+);
 
-named!(json_value<JsonValue>, ws!(alt!(
-    json_hash   => { |h|   JsonValue::Object(h)            } |
-    json_array  => { |v|   JsonValue::Array(v)             } |
-    json_string => { |s|   JsonValue::Str(String::from(s)) } |
-    float       => { |num| JsonValue::Num(num)             } |
-    boolean     => { |b|   JsonValue::Boolean(b)           }
-)));
+named!(
+    json_value<JsonValue>,
+    ws!(alt!(
+        json_hash   => { |h|   JsonValue::Object(h)            } |
+        json_array  => { |v|   JsonValue::Array(v)             } |
+        json_string => { |s|   JsonValue::Str(String::from(s)) } |
+        float       => { |num| JsonValue::Num(num)             } |
+        boolean     => { |b|   JsonValue::Boolean(b)           }
+    ))
+);
 
 #[test]
 fn json_bool_test() {
@@ -92,11 +113,10 @@ fn json_bool_test() {
         if let Some(&JsonValue::Boolean(ref resp)) = dict.get("b") {
             assert_eq!(false, *resp);
         }
-        return
+        return;
     }
     panic!("object did not parse");
 }
-
 
 #[test]
 fn json_hash_test() {
@@ -111,7 +131,7 @@ fn json_hash_test() {
         if let Some(&JsonValue::Str(ref resp)) = dict.get("b") {
             assert_eq!("x", *resp);
         }
-        return
+        return;
     }
     panic!("object did not parse");
 }
@@ -144,7 +164,7 @@ fn json_parse_example_test() {
                 assert_eq!("world", *resp);
             }
         }
-        return
+        return;
     }
     panic!("object did not parse");
 }
