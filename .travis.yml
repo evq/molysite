@@ -1,0 +1,22 @@
+language: rust
+branches:
+  only:
+  - master
+matrix:
+  include:
+    - name: "stable rust"
+      rust: stable
+      before_script:
+        - rustup component add rustfmt
+      script:
+        - cargo fmt -- --check
+        - cargo build
+        - cargo test
+    - name: "nightly rust + rustfmt"
+      rust: nightly
+      script:
+        - cargo fmt -- --check
+        - cargo build
+        - cargo test
+  allow_failures:
+    - name: "stable rust"
