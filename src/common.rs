@@ -2,8 +2,8 @@ use std::num::ParseIntError;
 use std::u32;
 
 use nom;
-use nom::{digit, hex_digit};
 use nom::types::CompleteStr;
+use nom::{digit, hex_digit};
 
 #[macro_export]
 macro_rules! complete_named (
@@ -34,11 +34,14 @@ complete_named!(pub boolean<bool>,map!(
     |value: CompleteStr| value == CompleteStr("true")
 ));
 
-complete_named!(unsigned_float, recognize!(alt_complete!(
-    delimited!(digit, tag!("."), opt!(complete!(digit))) |
-    delimited!(opt!(digit), tag!("."), digit) | 
-    digit
-)));
+complete_named!(
+    unsigned_float,
+    recognize!(alt_complete!(
+        delimited!(digit, tag!("."), opt!(complete!(digit)))
+            | delimited!(opt!(digit), tag!("."), digit)
+            | digit
+    ))
+);
 
 complete_named!(pub float<f32>, flat_map!(
     recognize!(alt_complete!(
@@ -52,15 +55,15 @@ complete_named!(pub float<f32>, flat_map!(
     parse_to!(f32)
 ));
 
-fn complete_to_i(i: CompleteStr) -> Result<u32, ParseIntError> { 
-    u32::from_str_radix(i.0, 16) 
+fn complete_to_i(i: CompleteStr) -> Result<u32, ParseIntError> {
+    u32::from_str_radix(i.0, 16)
 }
 
-complete_named!(int<u32>, map_res!(
-    preceded!(tag!("0x"), hex_digit),
-    complete_to_i
-));
-        
+complete_named!(
+    int<u32>,
+    map_res!(preceded!(tag!("0x"), hex_digit), complete_to_i)
+);
+
 // TODO: add support for octal
 complete_named!(pub number<f32>, alt_complete!(
     map!(int, |i| { i as f32 }) |

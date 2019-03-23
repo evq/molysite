@@ -18,16 +18,14 @@ fn main() {
         let mut file = match File::open(&path) {
             // The `description` method of `io::Error` returns a string that
             // describes the error
-            Err(why) => panic!("couldn't open {}: {}", display,
-                                                       why.description()),
+            Err(why) => panic!("couldn't open {}: {}", display, why.description()),
             Ok(file) => file,
         };
 
         // Read the file contents into a string, returns `io::Result<usize>`
         let mut s = String::new();
         match file.read_to_string(&mut s) {
-            Err(why) => panic!("couldn't read {}: {}", display,
-                                                       why.description()),
+            Err(why) => panic!("couldn't read {}: {}", display, why.description()),
             Ok(_) => {
                 let parsed = parse_hcl(&s);
                 print!("{}\n", parsed.unwrap());

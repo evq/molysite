@@ -1,21 +1,21 @@
 extern crate serde;
 
-#[cfg(feature="withserde")]
+#[cfg(feature = "withserde")]
 extern crate serde_json;
 
-#[allow(unused_imports)] 
+#[allow(unused_imports)]
 #[macro_use]
 extern crate serde_derive;
 
 extern crate molysite;
 
-#[allow(unused_imports)] 
+#[allow(unused_imports)]
 use std::collections::HashMap;
 
-#[allow(unused_imports)] 
+#[allow(unused_imports)]
 use molysite::hcl::parse_hcl;
 
-#[cfg(feature="withserde")]
+#[cfg(feature = "withserde")]
 #[test]
 fn hcl_serde_basic() {
     #[derive(Deserialize, Debug)]
@@ -34,8 +34,8 @@ location = \"bar\"";
     }
 }
 
-#[cfg(not(feature="arraynested"))]
-#[cfg(feature="withserde")]
+#[cfg(not(feature = "arraynested"))]
+#[cfg(feature = "withserde")]
 #[test]
 fn hcl_serde_policy() {
     #[derive(Deserialize, Debug)]

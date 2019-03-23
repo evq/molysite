@@ -1,5 +1,3 @@
-extern crate molysite;
-
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -7,7 +5,7 @@ use std::path::Path;
 use molysite::hcl::parse_hcl;
 use molysite::json::parse_json;
 
-#[cfg(feature="arraynested")]
+#[cfg(feature = "arraynested")]
 macro_rules! fixture_tests {
     ($($name:ident: $value:expr,)*) => {
     $(
@@ -20,7 +18,7 @@ macro_rules! fixture_tests {
     }
 }
 
-#[cfg(feature="arraynested")]
+#[cfg(feature = "arraynested")]
 fixture_tests! {
     test_fixture_assign_deep: ("assign_deep", true),
     test_fixture_basic: ("basic", true),

@@ -2,6 +2,7 @@
 authors = ["eV <ev@7pr.xyz>"]
 name = "molysite"
 version = "0.1.0"
+edition = "2018"
 
 [dependencies.nom]
 version = "^4.2"
